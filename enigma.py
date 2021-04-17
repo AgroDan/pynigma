@@ -25,6 +25,47 @@ will be cyclical and
 import random
 import json
 
+
+def int_to_roman(number):
+    """
+    Shamelessly stolen from O'Reilly. I just thought it was cool. Converts
+    an integer to a roman numeral. This is useful for automatically naming
+    the rotors.
+    """
+    if not isinstance(number, type(1)):
+        raise TypeError(f"expected integer, got {type(number)}")
+    if not 0 < number < 4000:
+        raise ValueError("Argument must be between 1 and 3999")
+    ints = (1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1)
+    nums = ('M', 'CM', 'D', 'CD', 'C', 'XC', 'L', 'XL', 'X', 'IX', 'V', 'IV', 'I')
+    result = []
+    for i in range(len(ints)):
+        count = int(number / ints[i])
+        result.append(nums[i] * count)
+        number -= ints[i] * count
+    return ''.join(result)
+
+
+
+class Enigma:
+    def __init__(self, name, rotors=4):
+        """
+        This is the function that starts it all up. It builds
+        the plugboard and sets up the rotors automatically. This
+        class will also handle the state of the machine, allowing
+        this state to be transferred over. Note that the state is
+        not the rotor settings, but rather the initial rotor states.
+        You would need to configure the rotor state and plugboard
+        settings in a separate function to be used for encryption.
+        """
+        self.name = name
+        self.rotors = []
+        self.rotors[rotors] = Rotor()
+        for i in range(1, rotors):
+            self.rotors.append(int_to_)
+
+
+
 class PlugBoard:
     def __init__(self, name, plugformat=None):
         """
@@ -51,19 +92,35 @@ class PlugBoard:
         As stated, this builds the plugboard based on the plugformat
         string.
         """
+        # Zero this out just to be certain
+        self.transpose_table = {}
+
         if self.plugformat is None:
             # No substitution, call it a day.
             for c in self.charset:
                 self.transpose_table[c] = c
         else:
-            # Read in the plugformat here.
-            # split on |, loop through each
-            # split on -, transpose those
-            # also transpose the inverse
-            # Then loop through each item in the charset afterwards
-            # and check if it's been transposed yet. If so, skip and
-            # move onto the next one.
+            try:
+                for inst in self.plugformat.split('|'):
+                    if len(inst) == 3:
+                        i_from, i_to = inst.split('-')
+                        if i_from in self.transpose_table or i_to in self.transpose_table:
+                            # We have overlap!
+                            raise Exception("Overlap in plugboard format!")
+                        self.transpose_table[i_from] = i_to
+                        self.transpose_table[i_to] = i_from
+            except ValueError:
+                raise Exception("Please follow plugformat of a-b|c-d|d-e")
+            finally:
+                for c in self.charset:
+                    if c not in self.transpose_table:
+                        self.transpose_table[c] = c
 
+    def transpose(self, c):
+        """
+        The official function to transpose a letter via the plugboard
+        """
+        return self.transpose_table[c]
 
 
 class Rotor:
