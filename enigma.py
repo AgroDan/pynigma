@@ -1,4 +1,3 @@
-        self.current += self.shift
 #!/usr/bin/env python3
 
 """
@@ -13,14 +12,59 @@ is randomly generated and written out as files.
 
 When a letter is pressed in the enigma machine, it is first substituted
 with another letter based on a plugboard. The result then goes through
-the first set of rotors before it is turned around to go back through
-the rotors again and through the plugboard to result in one letter.
+the first set of rotors before it is turned around with a reflector 
+to go back through the rotors again and through the plugboard to result
+in one letter. Note that here there is no reason to include a reflector,
+but to emulate (in a better sense) the way that Enigma works, you can
+simply use an additional rotor. As long as the rotors are linked, they
+will be cyclical and
 """
 
 # I am well aware of the implications of using MT19927 as the 
 # PRNG here. Then again, I'm making enigma so whatever
 import random
 import json
+
+class PlugBoard:
+    def __init__(self, name, plugformat=None):
+        """
+        Initializes a plugboard. The plugboard is a substitution cipher
+        that is fixed. It accepts a string as the plugformat parameter,
+        which should be specified as 'A-B|C-D|E-J' etc. The first letter
+        followed by a dash, then the letter it will transpose to. Note
+        that overlaps will be met with an Exception, so A -> B and B -> C
+        will throw an error and refuse to run. The plugformat must be
+        cyclical! A = B and B = A. An exception will be thrown if so.
+        The plugformat will be read in and missing letters will not be
+        transposed, but if one letter is transposed its compliment will
+        be transposed back automatically.
+        """
+        self.name = name
+        self.plugformat = plugformat
+        self.charset = '0123456789abcdefghijklmnopqrstuvwxyz' \
+                       'ABCDEFGHIJKLMNOPQRSTUVWXYZ !@#$%^&*()\'",./:;'
+        self.transpose_table = {}
+        self._build_plugboard()
+    
+    def _build_plugboard(self):
+        """
+        As stated, this builds the plugboard based on the plugformat
+        string.
+        """
+        if self.plugformat is None:
+            # No substitution, call it a day.
+            for c in self.charset:
+                self.transpose_table[c] = c
+        else:
+            # Read in the plugformat here.
+            # split on |, loop through each
+            # split on -, transpose those
+            # also transpose the inverse
+            # Then loop through each item in the charset afterwards
+            # and check if it's been transposed yet. If so, skip and
+            # move onto the next one.
+
+
 
 class Rotor:
     def __init__(self, name, start=0, shift=1, r=None):
