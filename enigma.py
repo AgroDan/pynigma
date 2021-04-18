@@ -24,6 +24,7 @@ will be cyclical and
 # PRNG here. Then again, I'm making enigma so whatever
 import random
 import json
+import yaml
 
 
 def int_to_roman(number):
@@ -48,22 +49,60 @@ def int_to_roman(number):
 
 
 class Enigma:
-    def __init__(self, name, rotors=4):
+    def __init__(self, yaml_file):
         """
-        This is the function that starts it all up. It builds
-        the plugboard and sets up the rotors automatically. This
-        class will also handle the state of the machine, allowing
-        this state to be transferred over. Note that the state is
-        not the rotor settings, but rather the initial rotor states.
-        You would need to configure the rotor state and plugboard
-        settings in a separate function to be used for encryption.
+        This is the function that starts it all up. By loading in
+        the config from a yaml file, it builds the plugboard and
+        sets up the rotors automatically. This class will also handle
+        the state of the machine, allowing this state to be
+        transferred over. Note that the state is not the rotor
+        settings, but rather the initial rotor states. You would
+        need to configure the rotor state and plugboard settings in
+        a separate function to be used for encryption.
         """
-        self.name = name
+        try:
+            with open(yaml_file, 'r') as f:
+                self.settings = yaml.safe_load(f)
+        except FileNotFoundError:
+            raise Exception ("YAML file not found!")
+        
+        # Build the rotor linkage.
+        # TODO: maybe include the rotor setup in a state file or something.
+        # Maybe use a cryptographic hash to determine if the rotor state is correct?
         self.rotors = []
-        self.rotors[rotors] = Rotor()
-        for i in range(1, rotors):
-            self.rotors.append(int_to_)
+        first = True
+        for r in self.settings['rotors']:
+            if first:
+                self.rotors.append(Rotor(name=r['name'],
+                                         start=r['start'], shift=r['shift']))
+                first = False
+            else:
+                self.rotors.append(Rotor(name=r['name'], start=r['start'],
+                                         shift=r['shift'], r=self.rotors[-1]))
 
+        # Build the plugboard
+        self.plugboard = PlugBoard(name=self.settings['plugboard']['name'],
+                         plugformat=self.settings['plugboard']['plugformat'])
+
+        # I will need to make this a global var since everyone uses it, but
+        # that's a bridge I'll burn at a later date
+        self.charset = '0123456789abcdefghijklmnopqrstuvwxyz' \
+                       'ABCDEFGHIJKLMNOPQRSTUVWXYZ !@#$%^&*()\'",./:;'
+
+    def transpose(self, data):
+        """
+            Does the actual transposition of each individual letter.
+        """
+        res = ''
+        for c in data:
+            if c in self.charset:
+                r = self.plugboard.transpose(c)
+                r = self.rotors[-1].rotate(r)
+                r = self.plugboard.transpose(r)
+                res += r
+            else:
+                res += c
+        return res
 
 
 class PlugBoard:
