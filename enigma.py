@@ -32,6 +32,7 @@ import zlib
 charset = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRS' \
           'TUVWXYZ !@#$%^&*()\'",./:;'
 
+
 """
     These next few functions will attempt to build and work with
     a "key format" for pynigma. This key will effectively work
@@ -146,6 +147,54 @@ def read_key(key):
 
     key["rotors"] = rotor_array
     return key
+
+
+"""
+    The next two functions allow a key to be saved similar to an RSA
+    private key. It looks similar but it is in no way the same.
+"""
+
+BEGIN_KEY = b"-----BEGIN PYNIGMA KEY-----"
+END_KEY = b"-----END PYNIGMA KEY-----"
+KEY_WIDTH = 70
+
+def read_key_file(filename):
+    """
+        Reads the keyfile in as designated by the key format standard.
+    """
+    try:
+        with open(filename, "rb") as f:
+            lines = f.read().splitlines()
+    except FileNotFoundError:
+        raise Exception("Key file not found!")
+
+    rkey = []
+    record = False
+    for line in lines:
+        if BEGIN_KEY in line and not record:
+            record = True
+            continue
+        if END_KEY in line and record:
+            record = False
+            break
+        if record:
+            rkey.append(line.strip())
+
+    return b''.join(rkey)
+
+def write_key_file(key, filename):
+    """
+        Writes the key according to spec
+    """
+    # Change to string so it can be written
+    # if type(key) is bytes:
+    #     key = key.decode()
+    with open(filename, "wb") as f:
+        f.write(BEGIN_KEY+b"\n")
+        for i in range(0, len(key), KEY_WIDTH):
+            f.write(key[i:i+KEY_WIDTH]+b"\n")
+        f.write(END_KEY+b"\n")
+
 
 
 class Enigma:
