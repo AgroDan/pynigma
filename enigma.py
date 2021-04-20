@@ -26,6 +26,9 @@ import random
 import json
 import yaml
 
+charset = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRS' \
+          'TUVWXYZ !@#$%^&*()\'",./:;'
+
 
 def int_to_roman(number):
     """
@@ -47,8 +50,47 @@ def int_to_roman(number):
     return ''.join(result)
 
 
+class EnigmaKey:
+    def __init__(self, key):
+        """
+            Takes the enigma key defined in keyformat which has been deciphered
+            and broken down using the read_key() function, which returns a complex
+            python object. This object will then be used to create the enigma
+            machine used to encrypt (and decrypt!) plaintext.
+        """
+        self.key = key
+        self.rotors = []
+        first = True
+        for r in self.key["rotors"]:
+            if first:
+                self.rotors.append(URotor(tpose=r['rotor'],
+                                   start=r['start'], shift=r['shift']))
+                first = False
+            else:
+                self.rotors.append(URotor(tpose=r['rotor'], start=r['start'],
+                                          shift=r['shift'], r=self.rotors[-1]))
 
-class Enigma:
+        # Build the plugboard
+        self.plugboard = PlugBoard(plugformat=self.key['plugboard'])
+        self.charset = charset
+
+    def transpose(self, data):
+        """
+            Does the actual transposition of each individual letter.
+        """
+        res = ''
+        for c in data:
+            if c in self.charset:
+                r = self.plugboard.transpose(c)
+                r = self.rotors[-1].rotate(r)
+                r = self.plugboard.transpose(r)
+                res += r
+            else:
+                res += c
+        return res
+
+
+class EnigmaYaml:
     def __init__(self, yaml_file):
         """
         This is the function that starts it all up. By loading in
@@ -81,13 +123,11 @@ class Enigma:
                                          shift=r['shift'], r=self.rotors[-1]))
 
         # Build the plugboard
-        self.plugboard = PlugBoard(name=self.settings['plugboard']['name'],
-                         plugformat=self.settings['plugboard']['plugformat'])
+        self.plugboard = PlugBoard(plugformat=self.settings['plugboard']['plugformat'])
 
         # I will need to make this a global var since everyone uses it, but
         # that's a bridge I'll burn at a later date
-        self.charset = '0123456789abcdefghijklmnopqrstuvwxyz' \
-                       'ABCDEFGHIJKLMNOPQRSTUVWXYZ !@#$%^&*()\'",./:;'
+        self.charset = charset
 
     def transpose(self, data):
         """
@@ -106,7 +146,7 @@ class Enigma:
 
 
 class PlugBoard:
-    def __init__(self, name, plugformat=None):
+    def __init__(self, plugformat=None):
         """
         Initializes a plugboard. The plugboard is a substitution cipher
         that is fixed. It accepts a string as the plugformat parameter,
@@ -119,10 +159,8 @@ class PlugBoard:
         transposed, but if one letter is transposed its compliment will
         be transposed back automatically.
         """
-        self.name = name
         self.plugformat = plugformat
-        self.charset = '0123456789abcdefghijklmnopqrstuvwxyz' \
-                       'ABCDEFGHIJKLMNOPQRSTUVWXYZ !@#$%^&*()\'",./:;'
+        self.charset = charset
         self.transpose_table = {}
         self._build_plugboard()
     
@@ -198,6 +236,79 @@ class Rotor:
         #     self.transpose_table[char] = r[i]
         with open(f"{self.name}.enigma", "w") as f:
             json.dump(self.transpose_table, f)
+
+    def _turn_rotor(self, amount):
+        """
+        Does nothing but turn the rotor <amount> times. Used for setting the
+        rotor.
+        """
+        # Rotate the rotor
+        r_charset = [self.transpose_table[k] for k in self.transpose_table]
+        r_charset = r_charset[amount%len(self.charset):] + r_charset[:amount%len(self.charset)]
+        left = [c for c in r_charset[:int(len(r_charset)/2)]]
+        right = [c for c in r_charset[int(len(r_charset)/2):]]
+        self.transpose_table = {}
+        for i,j in zip(left,right):
+            self.transpose_table[i] = j
+            self.transpose_table[j] = i
+
+        # for i,item in enumerate(self.charset):
+        #     self.transpose_table[item] = r_charset[i]
+
+    def transpose(self, c):
+        """
+            Does not rotate a rotor, just tranposes
+        """
+        if self.next_rotor is None:
+            return self.transpose_table[c]
+        else:
+            # This may technically cancel each other out, but ONLY if the rotor
+            # does not move. This allows the circuit to route through all the
+            # rotors AND BACK AGAIN.
+            return self.transpose_table[self.next_rotor.transpose(self.transpose_table[c])]
+
+
+    def rotate(self, c):
+        """
+        c := the character to get transposed
+        """
+        self._turn_rotor(self.shift)
+        self.current += self.shift
+
+        # If there is another rotor down the line, send the new transpose
+        if self.current > len(self.charset):
+            self.current %= len(self.charset)
+            if self.next_rotor is None:
+                return self.transpose_table[c]
+            else:
+                return self.transpose_table[self.next_rotor.rotate(self.transpose_table[c])]
+        else:
+            if self.next_rotor is None:
+                return self.transpose_table[c]
+            else:
+                return self.transpose_table[self.next_rotor.transpose(self.transpose_table[c])]
+
+
+class URotor:
+    def __init__(self, tpose, start=0, shift=1, r=None):
+        """
+        Unnamed Rotor. This is a rotor that does not generate
+        a transpose table, but rather receives one as a parameter.
+        This will never write or read anything from disk.
+        tpose := The transpose table sent as a parameter to this
+                 object
+        start := what position to set the rotor to
+        shift := how many positions to shift for each rotation
+        r := pointer to another initialized rotor instance, this
+             is the rotor next in line
+        """
+        self.transpose_table = tpose
+        self.start = start
+        self.current = start
+        self.shift = shift
+        self.next_rotor = r
+        self.charset = charset
+        self._turn_rotor(self.start)
 
     def _turn_rotor(self, amount):
         """

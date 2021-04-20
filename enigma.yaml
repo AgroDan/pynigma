@@ -2,17 +2,17 @@
 name: "PyNigma"
 plugboard:
   name: "myboard"
-  plugformat: "u-f|A-5|g-*"
+  plugformat: "u-f|A-5|g-*|8-b|c-7"
 rotors:
   - name: "Reflector"
     start: 1
     shift: 1
   - name: "I"
-    start: 42
-    shift: 1
+    start: 15
+    shift: 4
   - name: "II"
-    start: 75
-    shift: 3
+    start: 52
+    shift: 10
   - name: "III"
-    start: 69
-    shift: 11
+    start: 65
+    shift: 1
