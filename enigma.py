@@ -17,40 +17,138 @@ to go back through the rotors again and through the plugboard to result
 in one letter. Note that here there is no reason to include a reflector,
 but to emulate (in a better sense) the way that Enigma works, you can
 simply use an additional rotor. As long as the rotors are linked, they
-will be cyclical and
+will be cyclical and each supplied character will have its compliment.
+A = B and B = A and so on.
 """
 
 # I am well aware of the implications of using MT19927 as the 
 # PRNG here. Then again, I'm making enigma so whatever
 import random
 import json
-import yaml
+import hashlib
+import base64
+import zlib
 
 charset = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRS' \
           'TUVWXYZ !@#$%^&*()\'",./:;'
 
+"""
+    These next few functions will attempt to build and work with
+    a "key format" for pynigma. This key will effectively work
+    similarly to symmetric key encryption, because not only will you
+    be able to encrypt plaintext with it, you can decrypt the ciphertext
+    back to the plaintext with it as well. The way that this works is
+    not that this is a "key" per se, but is actually a compressed and
+    encoded list of instructions for the pynigma engine to use.
 
-def int_to_roman(number):
+    The basic format is a base64 encoded json list:
+
+    {
+        plugboard: <plugformat applied to plugboard>
+        rotors: [
+            0: {
+                start: <starting pos of rotor>
+                shift: <shift value of rotor>
+                rotor: {
+                    <base64-encoded and zlib compressed rotor substitution dict>
+                }
+                checksum: <sha256 hash of rotor>
+            }
+            1: {
+                etc etc etc
+            }
+        ]
+    }
+"""
+
+
+def generate_key(max_plugs=20, max_rotors=10):
     """
-    Shamelessly stolen from O'Reilly. I just thought it was cool. Converts
-    an integer to a roman numeral. This is useful for automatically naming
-    the rotors.
+        Generates a "key" for the pynigma cipher.
     """
-    if not isinstance(number, type(1)):
-        raise TypeError(f"expected integer, got {type(number)}")
-    if not 0 < number < 4000:
-        raise ValueError("Argument must be between 1 and 3999")
-    ints = (1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1)
-    nums = ('M', 'CM', 'D', 'CD', 'C', 'XC', 'L', 'XL', 'X', 'IX', 'V', 'IV', 'I')
-    result = []
-    for i in range(len(ints)):
-        count = int(number / ints[i])
-        result.append(nums[i] * count)
-        number -= ints[i] * count
-    return ''.join(result)
+
+    # Some assertions:
+    try:
+        assert max_plugs%2 == 0
+    except AssertionError:
+        raise Exception("max_plugs must be divisible by 2!")
+
+    try:
+        assert len(charset)%2 == 0
+    except AssertionError:
+        raise Exception("Charset length must be divisible by 2!")
+
+    # Build the plugboard
+    p = [c for c in charset]
+    plugformat = ''
+    plugsample = random.sample(p, random.randrange(int(max_plugs/2),max_plugs,2))
+    # print(plugsample)
+    for i in range(0, len(plugsample), 2):
+        # print(f"I : {i}")
+        if len(plugformat):
+            plugformat += f"|{plugsample[i]}-{plugsample[i+1]}"
+        else:
+            plugformat += f"{plugsample[i]}-{plugsample[i+1]}"
+
+    # Build the rotors
+    rotors = []
+    for rotor in range(max_rotors):
+        r = [c for c in charset]
+        random.shuffle(r)
+        left = [c for c in r[:int(len(r)/2)]]
+        right = [c for c in r[int(len(r)/2):]]
+        transpose_table = {}
+        for i,j in zip(left,right):
+            transpose_table[i] = j
+            transpose_table[j] = i
+        r_setting = zlib.compress(json.dumps(transpose_table).encode('utf-8'))
+        m = hashlib.sha512()
+        m.update(r_setting)
+        checksum = m.hexdigest()
+        rotors.append({'rotor': base64.b64encode(r_setting).decode(),
+                       'checksum': checksum,
+                       'start': random.randrange(1, len(charset)),
+                       'shift': random.randrange(1, int(len(charset)/2))})
+
+    # Now put it all together
+
+    result = { "plugboard": json.dumps(plugformat), "rotors": json.dumps(rotors) }
+    result = json.dumps(result).encode('utf-8')
+    return base64.b64encode(zlib.compress(result))
 
 
-class EnigmaKey:
+def read_key(key):
+    """
+    Unpacks and reads the key for usage with Enigma. This is done in this file
+    so the libraries don't need to be imported again.
+    """
+    # First, b64decode and decompress
+    key = json.loads(zlib.decompress(base64.b64decode(key)))
+    key["plugboard"] = json.loads(key["plugboard"])
+    key["rotors"] = json.loads(key["rotors"])
+
+    rotor_array = []
+
+    # Now loop through each rotor
+    for r in key["rotors"]:
+        gear = {}
+        gear['rotor'] = base64.b64decode(r['rotor'])
+        m = hashlib.sha512()
+        m.update(gear['rotor'])
+        if r['checksum'] != m.hexdigest():
+            raise Exception("Invalid hash for supplied rotor!")
+        else:
+            gear['rotor'] = json.loads(zlib.decompress(gear['rotor']))
+            gear['start'] = r['start']
+            gear['shift'] = r['shift']
+
+        rotor_array.append(gear)
+
+    key["rotors"] = rotor_array
+    return key
+
+
+class Enigma:
     def __init__(self, key):
         """
             Takes the enigma key defined in keyformat which has been deciphered
@@ -58,75 +156,20 @@ class EnigmaKey:
             python object. This object will then be used to create the enigma
             machine used to encrypt (and decrypt!) plaintext.
         """
-        self.key = key
+        self.key = read_key(key)
         self.rotors = []
         first = True
         for r in self.key["rotors"]:
             if first:
-                self.rotors.append(URotor(tpose=r['rotor'],
+                self.rotors.append(Rotor(tpose=r['rotor'],
                                    start=r['start'], shift=r['shift']))
                 first = False
             else:
-                self.rotors.append(URotor(tpose=r['rotor'], start=r['start'],
+                self.rotors.append(Rotor(tpose=r['rotor'], start=r['start'],
                                           shift=r['shift'], r=self.rotors[-1]))
 
         # Build the plugboard
         self.plugboard = PlugBoard(plugformat=self.key['plugboard'])
-        self.charset = charset
-
-    def transpose(self, data):
-        """
-            Does the actual transposition of each individual letter.
-        """
-        res = ''
-        for c in data:
-            if c in self.charset:
-                r = self.plugboard.transpose(c)
-                r = self.rotors[-1].rotate(r)
-                r = self.plugboard.transpose(r)
-                res += r
-            else:
-                res += c
-        return res
-
-
-class EnigmaYaml:
-    def __init__(self, yaml_file):
-        """
-        This is the function that starts it all up. By loading in
-        the config from a yaml file, it builds the plugboard and
-        sets up the rotors automatically. This class will also handle
-        the state of the machine, allowing this state to be
-        transferred over. Note that the state is not the rotor
-        settings, but rather the initial rotor states. You would
-        need to configure the rotor state and plugboard settings in
-        a separate function to be used for encryption.
-        """
-        try:
-            with open(yaml_file, 'r') as f:
-                self.settings = yaml.safe_load(f)
-        except FileNotFoundError:
-            raise Exception ("YAML file not found!")
-        
-        # Build the rotor linkage.
-        # TODO: maybe include the rotor setup in a state file or something.
-        # Maybe use a cryptographic hash to determine if the rotor state is correct?
-        self.rotors = []
-        first = True
-        for r in self.settings['rotors']:
-            if first:
-                self.rotors.append(Rotor(name=r['name'],
-                                         start=r['start'], shift=r['shift']))
-                first = False
-            else:
-                self.rotors.append(Rotor(name=r['name'], start=r['start'],
-                                         shift=r['shift'], r=self.rotors[-1]))
-
-        # Build the plugboard
-        self.plugboard = PlugBoard(plugformat=self.settings['plugboard']['plugformat'])
-
-        # I will need to make this a global var since everyone uses it, but
-        # that's a bridge I'll burn at a later date
         self.charset = charset
 
     def transpose(self, data):
@@ -201,95 +244,6 @@ class PlugBoard:
 
 
 class Rotor:
-    def __init__(self, name, start=0, shift=1, r=None):
-        """
-        name := name of the rotor, usually I, II, III, IV, etc
-        start := what position to set the rotor to
-        r := pointer to another initialized rotor instance, this
-             is the rotor next in line
-        """
-        self.name = name
-        self.start = start
-        self.current = start
-        self.shift = shift
-        self.next_rotor = r
-        self.charset = '0123456789abcdefghijklmnopqrstuvwxyz' \
-                       'ABCDEFGHIJKLMNOPQRSTUVWXYZ !@#$%^&*()\'",./:;'
-        try:
-            with open(f"{self.name}.enigma", "r") as f:
-                self.transpose_table = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            self._build_transpose_table()
-        self._turn_rotor(self.start)
-
-    def _build_transpose_table(self):
-        r = [c for c in self.charset]
-        random.shuffle(r)
-        left = [c for c in r[:int(len(r)/2)]]
-        right = [c for c in r[int(len(r)/2):]]
-        self.transpose_table = {}
-        for i,j in zip(left,right):
-            self.transpose_table[i] = j
-            self.transpose_table[j] = i
-        # self.transpose_table = {}
-        # for i, char in enumerate(self.charset):
-        #     self.transpose_table[char] = r[i]
-        with open(f"{self.name}.enigma", "w") as f:
-            json.dump(self.transpose_table, f)
-
-    def _turn_rotor(self, amount):
-        """
-        Does nothing but turn the rotor <amount> times. Used for setting the
-        rotor.
-        """
-        # Rotate the rotor
-        r_charset = [self.transpose_table[k] for k in self.transpose_table]
-        r_charset = r_charset[amount%len(self.charset):] + r_charset[:amount%len(self.charset)]
-        left = [c for c in r_charset[:int(len(r_charset)/2)]]
-        right = [c for c in r_charset[int(len(r_charset)/2):]]
-        self.transpose_table = {}
-        for i,j in zip(left,right):
-            self.transpose_table[i] = j
-            self.transpose_table[j] = i
-
-        # for i,item in enumerate(self.charset):
-        #     self.transpose_table[item] = r_charset[i]
-
-    def transpose(self, c):
-        """
-            Does not rotate a rotor, just tranposes
-        """
-        if self.next_rotor is None:
-            return self.transpose_table[c]
-        else:
-            # This may technically cancel each other out, but ONLY if the rotor
-            # does not move. This allows the circuit to route through all the
-            # rotors AND BACK AGAIN.
-            return self.transpose_table[self.next_rotor.transpose(self.transpose_table[c])]
-
-
-    def rotate(self, c):
-        """
-        c := the character to get transposed
-        """
-        self._turn_rotor(self.shift)
-        self.current += self.shift
-
-        # If there is another rotor down the line, send the new transpose
-        if self.current > len(self.charset):
-            self.current %= len(self.charset)
-            if self.next_rotor is None:
-                return self.transpose_table[c]
-            else:
-                return self.transpose_table[self.next_rotor.rotate(self.transpose_table[c])]
-        else:
-            if self.next_rotor is None:
-                return self.transpose_table[c]
-            else:
-                return self.transpose_table[self.next_rotor.transpose(self.transpose_table[c])]
-
-
-class URotor:
     def __init__(self, tpose, start=0, shift=1, r=None):
         """
         Unnamed Rotor. This is a rotor that does not generate

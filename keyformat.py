@@ -41,14 +41,26 @@ import base64
 from enigma import charset
 import zlib
 
-def generate_key():
+def generate_key(max_plugs=20, max_rotors=10):
     """
         Generates a "key" for the pynigma cipher.
     """
+
+    # Some assertions:
+    try:
+        assert max_plugs%2 == 0
+    except AssertionError:
+        raise Exception("max_plugs must be divisible by 2!")
+
+    try:
+        assert len(charset)%2 == 0
+    except AssertionError:
+        raise Exception("Charset length must be divisible by 2!")
+
     # Build the plugboard
     p = [c for c in charset]
     plugformat = ''
-    plugsample = random.sample(p, random.randrange(10,20,2))
+    plugsample = random.sample(p, random.randrange(int(max_plugs/2),max_plugs,2))
     # print(plugsample)
     for i in range(0, len(plugsample), 2):
         # print(f"I : {i}")
@@ -58,9 +70,8 @@ def generate_key():
             plugformat += f"{plugsample[i]}-{plugsample[i+1]}"
 
     # Build the rotors
-    rotorcount = 10
     rotors = []
-    for rotor in range(rotorcount):
+    for rotor in range(max_rotors):
         r = [c for c in charset]
         random.shuffle(r)
         left = [c for c in r[:int(len(r)/2)]]
@@ -114,4 +125,3 @@ def read_key(key):
 
     key["rotors"] = rotor_array
     return key
-    
