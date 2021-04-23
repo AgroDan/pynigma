@@ -83,8 +83,7 @@ print(my_plaintext)
 After some trivial changes I was able to modify the code to use a substitution cipher to encrypt binary data! You can now encrypt an entire file with PyNigma! This form of encryption is even harder to crack than the original, as this now works with a transposition table of 256 unique items (for every possible bit order in a byte). Since the transposition table is simply using integers as the actual items stored, an integer can easily be converted into a byte. The idea is similar, but the best way to use it in practice is to use the included `en.py` script:
 
 ```bash
-╭─dan@taco ~/scripts/pynigma ‹main*› 
-╰─$ ./en.py -h
+$ ./en.py -h
 usage: en.py [-h] [-e WILL_ENC] [-o OutFile] [-g keyfile] [-r keyfile]
 
 Encode or Decode a file with PyNigma!
@@ -103,8 +102,7 @@ optional arguments:
 
 ## To Generate a Key
 ```bash
-╭─dan@taco ~/scripts/pynigma ‹main*› 
-╰─$ ./en.py -g mykey.key
+$ ./en.py -g mykey.key
 ```
  
 ## To Encrypt a File with a Generated Key
@@ -112,8 +110,7 @@ optional arguments:
 This will read from the key `mykey.key`, encrypt the file `./myfile` and output the result to `./myfile.enc`
 
 ```bash
-╭─dan@taco ~/scripts/pynigma ‹main*› 
-╰─$ ./en.py -r mykey.key -e ./myfile -o ./myfile.enc
+$ ./en.py -r mykey.key -e ./myfile -o ./myfile.enc
 ```
 
 ### Special Note
