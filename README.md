@@ -14,7 +14,9 @@ The elegance of this cipher is that there is no "decrypt" function necessary. If
 
 ## Usage
 
-**First, generate a key.** The key is literally a compressed set of instructions and rotor configurations for the enigma machine, organized in such a way that mimics SSH Private Keys.
+### Generate a Key
+
+The key is literally a compressed set of instructions and rotor configurations for the enigma machine, organized in such a way that mimics SSH Private Keys.
 
 ```python
 import enigma
@@ -22,7 +24,9 @@ import enigma
 my_key = enigma.generate_key()
 ```
 
-**Write the key to a file.** You can write the key to a file for later usage if you want.
+### Write a Key to a File
+
+You can write the key to a file for later usage if you want.
 
 ```python
 import enigma
@@ -31,7 +35,9 @@ my_key = enigma.generate_key()
 enigma.write_key_file(my_key, 'my_key.key')
 ```
 
-**Read the key from a file.** You can read the key as well as long as it is formatted properly.
+### Read the key from a file
+
+You can read the key as well as long as it is formatted properly.
 
 ```python
 import enigma
@@ -39,7 +45,9 @@ import enigma
 my_key = enigma.read_key_file('my_key.key')
 ```
 
-**Get your secret message.** Load a new instance of the Enigma object and use the `transpose()` function.
+### Get your secret message
+
+Load a new instance of the Enigma object and use the `transpose()` function.
 
 ```python
 import enigma
@@ -54,7 +62,9 @@ print(my_cipher)
 # Prints: "3/M3u@WPb9VLu"
 ```
 
-**Decode the ciphertext.** Assuming you have the key used to generate the ciphertext, you can use it to transpose the ciphertext and it will print out the plaintext!
+### Decode the ciphertext
+
+Assuming you have the key used to generate the ciphertext, you can use it to transpose the ciphertext and it will print out the plaintext!
 
 ```python
 import enigma
@@ -67,3 +77,47 @@ print(my_plaintext)
 
 # Prints: "Hello, World!"
 ```
+
+# Now it encrypts binary data!
+
+After some trivial changes I was able to modify the code to use a substitution cipher to encrypt binary data! You can now encrypt an entire file with PyNigma! This form of encryption is even harder to crack than the original, as this now works with a transposition table of 256 unique items (for every possible bit order in a byte). Since the transposition table is simply using integers as the actual items stored, an integer can easily be converted into a byte. The idea is similar, but the best way to use it in practice is to use the included `en.py` script:
+
+```bash
+╭─dan@taco ~/scripts/pynigma ‹main*› 
+╰─$ ./en.py -h
+usage: en.py [-h] [-e WILL_ENC] [-o OutFile] [-g keyfile] [-r keyfile]
+
+Encode or Decode a file with PyNigma!
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -e WILL_ENC, --encrypt WILL_ENC, --decrypt WILL_ENC
+                        Encode or Decode a file. Defaults to STDOUT if -o is not given.
+  -o OutFile, --output OutFile
+                        The file to write the output to.
+  -g keyfile, --generate keyfile
+                        Generate a key and store it in a file
+  -r keyfile, --read-key keyfile
+                        Read a key from a file
+```
+
+## To Generate a Key
+```bash
+╭─dan@taco ~/scripts/pynigma ‹main*› 
+╰─$ ./en.py -g mykey.key
+```
+ 
+## To Encrypt a File with a Generated Key
+
+This will read from the key `mykey.key`, encrypt the file `./myfile` and output the result to `./myfile.enc`
+
+```bash
+╭─dan@taco ~/scripts/pynigma ‹main*› 
+╰─$ ./en.py -r mykey.key -e ./myfile -o ./myfile.enc
+```
+
+### Special Note
+
+This is really really REALLY slow. There are a ton of substitutions happening _per byte_. This is by no means even a competitor for something like AES or similar. This is just an incredibly slow process to do something that AES can do a lot faster and probably a lot more secure. However, there are no bitwise functions being performed, meaning that unless someone has the key, I don't foresee a way for anyone to determine a correlation from one byte to another. The key contains the rotors that were used, their initial values, their shift values, and the plugboard substitutions. Without those, there is no way anyone could determine the values substituted in the process.
+
+Does this make it unbreakable? Probably not. But even still, this was a fun thought experiment to see if I could create a new encryption algorithm.
