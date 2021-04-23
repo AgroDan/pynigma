@@ -15,8 +15,6 @@ import hashlib
 import base64
 import zlib
 
-# charset = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRS' \
-#           'TUVWXYZ !@#$%^&*()\'",./:;'
 charset = [i for i in range(256)]
 
 def generate_key(max_plugs=20, max_rotors=10):
