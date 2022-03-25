@@ -72,3 +72,15 @@ class MT19937Prime():
         else:
             width = stop - start
             return start + self.randbelow(width)
+
+    def shuffle(self, x: list):
+        """
+            Takes a list and shuffles it a whole lot
+        """
+        for j in range(0, len(x)):
+            for i in range(0, len(x)):
+                randidx = self.randbelow(len(x))
+                y = x[i]
+                z = x[randidx]
+                x[i] = z
+                x[randidx] = y
